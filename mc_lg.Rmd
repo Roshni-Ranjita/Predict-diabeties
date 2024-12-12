@@ -1,0 +1,111 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+# Load required libraries
+library(glmnet)
+library(caret)
+library(pROC)
+library(ggplot2)
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Simulate a diabetes dataset
+n <- 1000
+
+data <- read.csv("Data/Post_Feature_Engineering 1.csv")
+
+# Convert the response variable to a factor for classification
+data$Diabetes <- as.factor(data$Diagnosis)
+
+# Function to run Monte Carlo simulation
+monte_carlo_simulation <- function(data, num_iterations = 100) {
+  results <- list()
+  
+  for (i in seq_len(num_iterations)) {
+    # Split data into training and testing sets
+    train_index <- createDataPartition(data$Diabetes, p = 0.7, list = FALSE)
+    train_data <- data[train_index, ]
+    test_data <- data[-train_index, ]
+    
+    # Train Logistic Regression model
+    log_model <- glm(Diabetes ~ Age + BMI + FamilyHistoryDiabetes + HbA1c + 
+              Hypertension + SystolicBP + CholesterolHDL, data = train_data, family = "binomial")
+    
+    # Make predictions on test data
+    predictions <- predict(log_model, newdata = test_data, type = "response")
+    
+    # Calculate evaluation metrics
+    roc_obj <- roc(test_data$Diabetes, predictions)
+    auc <- auc(roc_obj)
+    accuracy <- mean(ifelse(predictions > 0.5, 1, 0) == as.numeric(test_data$Diabetes) - 1)
+    
+    results[[i]] <- list(auc = auc, accuracy = accuracy, roc = roc_obj)
+  }
+  
+  return(results)
+}
+
+# Run Monte Carlo simulation
+mc_results <- monte_carlo_simulation(data)
+
+# Calculate average AUC and accuracy
+avg_auc <- mean(sapply(mc_results, function(x) x$auc))
+avg_accuracy <- mean(sapply(mc_results, function(x) x$accuracy))
+
+# Print results
+cat("Average AUC:", round(avg_auc, 3), "\n")
+cat("Average Accuracy:", round(avg_accuracy * 100, 2), "%\n")
+
+# Visualization
+
+# 1. ROC Curve
+plot(mc_results[[1]]$roc, main = "ROC Curve", col = "blue")
+for (i in 2:length(mc_results)) {
+  plot(mc_results[[i]]$roc, add = TRUE, col = rgb(0, 0, 1, alpha = 0.1))
+}
+
+# 2. Histogram of AUC values
+auc_values <- sapply(mc_results, function(x) x$auc)
+ggplot(data.frame(AUC = auc_values), aes(x = AUC)) +
+  geom_histogram(binwidth = 0.01, fill = "blue", color = "black") +
+  ggtitle("Distribution of AUC Values") +
+  xlab("AUC") +
+  ylab("Frequency")
+
+# 3. Boxplot of Accuracies
+accuracy_values <- sapply(mc_results, function(x) x$accuracy)
+ggplot(data.frame(Accuracy = accuracy_values), aes(y = Accuracy)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Distribution of Accuracy Values") +
+  ylab("Accuracy")
+
+# 4. Coefficient Plot
+final_model <- glm(Diabetes ~ Age + BMI + FamilyHistoryDiabetes + HbA1c + 
+              Hypertension + SystolicBP + CholesterolHDL, data = data, family = "binomial")
+coef_df <- data.frame(
+  Variable = names(coef(final_model))[-1],
+  Coefficient = coef(final_model)[-1]
+)
+ggplot(coef_df, aes(x = reorder(Variable, Coefficient), y = Coefficient)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  ggtitle("Logistic Regression Coefficients") +
+  xlab("Variables") +
+  ylab("Coefficient Value")
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+

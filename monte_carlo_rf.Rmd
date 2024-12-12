@@ -1,0 +1,95 @@
+
+```{r}
+# Load required libraries
+library(randomForest)
+library(caret)
+library(pROC)
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Simulate a diabetes dataset
+n <- 1000
+
+data <- read.csv("Data/Post_Feature_Engineering 1.csv")
+
+# Convert the response variable to a factor for classification
+data$Diabetes <- as.factor(data$Diagnosis)
+
+# Function to run Monte Carlo simulation
+monte_carlo_simulation <- function(data, num_iterations = 100) {
+  results <- list()
+  
+  for (i in seq_len(num_iterations)) {
+    # Split data into training and testing sets
+    train_index <- createDataPartition(data$Diabetes, p = 0.7, list = FALSE)
+    train_data <- data[train_index, ]
+    test_data <- data[-train_index, ]
+    
+    # Train Random Forest model
+    rf_model <- randomForest(Diabetes ~ Age + BMI + FamilyHistoryDiabetes + HbA1c + 
+              Hypertension + SystolicBP + CholesterolHDL, data = train_data, ntree = 100)
+    
+    # Make predictions on test data
+    predictions <- predict(rf_model, test_data, type = "prob")[, 2]
+    
+    # Calculate evaluation metrics
+    roc_obj <- roc(test_data$Diabetes, predictions)
+    auc <- auc(roc_obj)
+    accuracy <- mean(predict(rf_model, test_data) == test_data$Diabetes)
+    
+    results[[i]] <- list(auc = auc, accuracy = accuracy)
+  }
+  
+  return(results)
+}
+
+# Run Monte Carlo simulation
+mc_results <- monte_carlo_simulation(data)
+
+# Calculate average AUC and accuracy
+avg_auc <- mean(sapply(mc_results, function(x) x$auc))
+avg_accuracy <- mean(sapply(mc_results, function(x) x$accuracy))
+
+# Print results
+cat("Average AUC:", round(avg_auc, 3), "\n")
+cat("Average Accuracy:", round(avg_accuracy * 100, 2), "%\n")
+
+```
+```{r}
+
+
+
+# 2. Histogram of AUC values
+auc_values <- sapply(mc_results, function(x) x$auc)
+ggplot(data.frame(AUC = auc_values), aes(x = AUC)) +
+  geom_histogram(binwidth = 0.01, fill = "blue", color = "black") +
+  ggtitle("Distribution of AUC Values") +
+  xlab("AUC") +
+  ylab("Frequency")
+
+# 3. Boxplot of Accuracies
+accuracy_values <- sapply(mc_results, function(x) x$accuracy)
+ggplot(data.frame(Accuracy = accuracy_values), aes(y = Accuracy)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  ggtitle("Distribution of Accuracy Values") +
+  ylab("Accuracy")
+
+# 4. Variable Importance Plot
+importance_df <- as.data.frame(importance(randomForest(Diabetes ~ Age + BMI + FamilyHistoryDiabetes + HbA1c + 
+              Hypertension + SystolicBP + CholesterolHDL, data = data)))
+importance_df$Variable <- rownames(importance_df)
+ggplot(importance_df, aes(x = reorder(Variable, MeanDecreaseGini), y = MeanDecreaseGini)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  ggtitle("Variable Importance") +
+  xlab("Variables") +
+  ylab("Mean Decrease in Gini")
+
+```
+
+
+data <- read.csv("Data/Post_Feature_Engineering 1.csv")
+
+
+
